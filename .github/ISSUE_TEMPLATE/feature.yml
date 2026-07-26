@@ -1,0 +1,19 @@
+name: Feature request
+description: Suggest a provider-neutral improvement
+body:
+  - type: textarea
+    attributes:
+      label: Problem
+      description: What user problem should this solve?
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Proposed behavior
+      description: Include command examples using synthetic data.
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Privacy and compatibility
+      description: Note data access, scope boundaries, migrations, or hosting assumptions.

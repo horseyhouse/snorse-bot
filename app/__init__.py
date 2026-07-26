@@ -1,0 +1,1 @@
+"""Snorse-bot application package."""

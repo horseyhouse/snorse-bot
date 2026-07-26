@@ -1,0 +1,23 @@
+name: Bug report
+description: Report reproducible incorrect behavior using synthetic data
+body:
+  - type: textarea
+    attributes:
+      label: What happened?
+      description: Do not include messages, phone numbers, credentials, or group IDs.
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Reproduction
+      description: Include the command shape, expected result, and synthetic test data.
+    validations:
+      required: true
+  - type: input
+    attributes:
+      label: Version
+      description: Release tag or commit SHA
+  - type: textarea
+    attributes:
+      label: Hosting environment
+      description: OS/container runtime and state-service implementation

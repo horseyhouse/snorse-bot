@@ -1,0 +1,21 @@
+services:
+  signal-api:
+    image: bbernhard/signal-cli-rest-api@sha256:2399d449123cdad56c4d859277e3b9127e1a00c4d2ab4601c239882609286cf8
+    restart: unless-stopped
+    environment:
+      MODE: json-rpc-native
+      LOG_LEVEL: info
+    volumes:
+      - signal-state:/home/.local/share/signal-cli
+    ports:
+      - "127.0.0.1:8080:8080"
+
+  bot:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      - signal-api
+
+volumes:
+  signal-state:
