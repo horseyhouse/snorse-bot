@@ -158,3 +158,10 @@ provider. A host must provide:
 
 Provider-specific deployment examples can live in separate repositories without
 becoming dependencies of this application.
+## Turnkey self-hosting
+
+Copy `.env.example` to `.env`, configure a separate Signal-capable number and a long random `STATE_API_TOKEN`, register it with the included Signal API, then run `docker compose up -d`. The bundled SQLite state service needs no cloud credentials; `state-data` and `signal-state` are durable volumes and both must be backed up before upgrades. Never run two bot copies with the same Signal identity.
+
+Google Calendar is optional. Reminders and group scopes continue to work without credentials; calendar commands report that the integration is not configured.
+
+Private self-hosts default to effectively unlimited pools. Set `MAX_ACTIVE_GROUPS`, `MAX_PERSONAL_USERS`, and `ADMISSION_MODE=auto` to opt into the shared-host gate.

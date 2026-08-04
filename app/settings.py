@@ -28,6 +28,11 @@ class Settings:
     signal_api_timeout_seconds: int
     schedule_interval_seconds: int
     reconnect_max_seconds: int
+    public_site_url: str
+    support_url: str
+    max_active_groups: int
+    max_personal_users: int
+    admission_mode: str
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -73,4 +78,9 @@ class Settings:
                     "30",
                 )
             ),
+            public_site_url=os.getenv("PUBLIC_SITE_URL", "https://snorse.com").rstrip("/"),
+            support_url=os.getenv("SUPPORT_URL", "").rstrip("/"),
+            max_active_groups=int(os.getenv("MAX_ACTIVE_GROUPS", "10")),
+            max_personal_users=int(os.getenv("MAX_PERSONAL_USERS", "25")),
+            admission_mode=os.getenv("ADMISSION_MODE", "auto").strip().casefold(),
         )

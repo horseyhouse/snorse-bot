@@ -1,4 +1,16 @@
 services:
+  state:
+    build: .
+    entrypoint: ["python", "-m", "app.sqlite_state"]
+    command: []
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      STATE_DB_PATH: /data/snorse.db
+      STATE_BIND: 0.0.0.0
+    volumes:
+      - state-data:/data
+
   signal-api:
     image: bbernhard/signal-cli-rest-api@sha256:2399d449123cdad56c4d859277e3b9127e1a00c4d2ab4601c239882609286cf8
     restart: unless-stopped
@@ -16,6 +28,8 @@ services:
     env_file: .env
     depends_on:
       - signal-api
+      - state
 
 volumes:
   signal-state:
+  state-data:

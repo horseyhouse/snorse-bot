@@ -47,6 +47,7 @@ from app.signal_scopes import (
     signal_group_scopes,
     visible_groups_for_sender,
 )
+from app.admission import SUPPORT_MESSAGE, WAITLIST_MESSAGE, support_due
 
 SETTINGS = Settings.from_env()
 LOG = logging.getLogger(SETTINGS.app_name)
@@ -65,6 +66,8 @@ CALENDAR_LOOKBACK_MINUTES = 12
 MAX_CALENDAR_RANGE_DAYS = 93
 GROUP_SYNC_INTERVAL_SECONDS = 5 * 60
 GOOGLE_CALENDAR_SERVICE_ACCOUNT = SETTINGS.calendar_service_account_email
+PUBLIC_SITE_URL = SETTINGS.public_site_url
+SUPPORT_URL = SETTINGS.support_url
 SCOPE_CACHE: list[dict[str, Any]] = []
 SCOPE_CACHE_AT = 0.0
 
@@ -309,14 +312,24 @@ def sync_signal_groups() -> list[dict[str, Any]]:
     configured_scopes(force=True)
     for group in result.get("newGroups", []):
         try:
+            message = (
+                WAITLIST_MESSAGE.format(site=PUBLIC_SITE_URL)
+                if group.get("admissionStatus") == "waitlisted"
+                else f"hi!\n\n{HELP_TEXT}"
+            )
             send_to_recipient(
                 group["groupRecipient"],
-                f"hi!\n\n{HELP_TEXT}",
+                message,
                 styled=True,
             )
             LOG.info("Welcomed a new Signal group")
         except Exception:
             LOG.exception("Could not welcome a new Signal group")
+    for group in result.get("newlyActivated", []):
+        try:
+            send_to_recipient(group["groupRecipient"], f"hi!\n\n{HELP_TEXT}", styled=True)
+        except Exception:
+            LOG.exception("Could not welcome an activated Signal group")
     LOG.info("Synchronized %d Signal group scope(s)", len(scopes))
     return result["scopes"]
 
@@ -916,6 +929,20 @@ def handle_direct_command(message: dict[str, Any]) -> bool:
     private_scope = personal_scope(
         envelope.get("sourceUuid") or envelope.get("sourceNumber") or sender
     )
+    # Group members use their group's access and never consume personal slots.
+    if REMINDER_API_URL and REMINDER_API_TOKEN:
+        try:
+            if not groups_for_sender(envelope):
+                admission = reminder_api(
+                    "/api/admission/personal", method="POST", payload=private_scope
+                )["scope"]
+                if admission.get("admissionStatus") != "active":
+                    acknowledge_commands(message, REACTION_WARNING, [f"this personal spot is waitlisted for now. status: {PUBLIC_SITE_URL}/capacity."], recipient=sender)
+                    return True
+        except Exception:
+            LOG.exception("Could not determine personal admission")
+            acknowledge_commands(message, REACTION_ERROR, ["❌ i couldn't check capacity! try again shortly."], recipient=sender)
+            return True
     visible_groups = None
     if any(
         command.strip().casefold() in {"reminders", "list"}
@@ -966,6 +993,7 @@ def handle_group_command(message: dict[str, Any]) -> bool:
             for scope in configured_scopes()
             if scope["groupRecipient"] == group["groupRecipient"]
             and scope.get("active", True)
+            and scope.get("admissionStatus", "active") == "active"
         ),
         None,
     )
@@ -977,10 +1005,17 @@ def handle_group_command(message: dict[str, Any]) -> bool:
                 for scope in configured_scopes()
                 if scope["groupRecipient"] == group["groupRecipient"]
                 and scope.get("active", True)
+                and scope.get("admissionStatus", "active") == "active"
             ),
             None,
         )
         if not configured_group:
+            waitlisted = next((scope for scope in configured_scopes() if scope["groupRecipient"] == group["groupRecipient"] and scope.get("admissionStatus") == "waitlisted"), None)
+            if waitlisted:
+                status = reminder_api("/api/admission/waitlist-status", method="POST", payload={"groupRecipient":group["groupRecipient"]})
+                if status.get("notify"):
+                    send_to_recipient(group["groupRecipient"], f"commands are waitlisted here for now. status: {PUBLIC_SITE_URL}/capacity.")
+                return True
             LOG.info(
                 "Group command ignored: recipient %s could not be configured",
                 group["groupRecipient"],
@@ -1112,6 +1147,23 @@ def fire_calendar_events(*, now: datetime | None = None) -> int:
     return len(events)
 
 
+def fire_support_notes(*, now: datetime | None = None) -> int:
+    """Send optional support copy only to eligible active groups."""
+    now = now or datetime.now(timezone.utc)
+    if not SUPPORT_URL:
+        return 0
+    sent = 0
+    for scope in configured_scopes():
+        if not support_due(scope, now, SUPPORT_URL):
+            continue
+        send_to_group(SUPPORT_MESSAGE.format(support=SUPPORT_URL), recipient=scope["groupRecipient"])
+        reminder_api("/api/scopes/support-sent", method="POST", payload={"groupRecipient":scope["groupRecipient"],"sentAt":now.isoformat()})
+        sent += 1
+    if sent:
+        configured_scopes(force=True)
+    return sent
+
+
 def process_messages(messages: list[dict[str, Any]]) -> tuple[int, int]:
     """Process Signal envelopes and return (ignored direct messages, commands)."""
     ignored_direct_messages = 0
@@ -1149,6 +1201,10 @@ def run_scheduled_tasks() -> tuple[int, int]:
     except Exception:
         LOG.exception("Could not process calendar events")
         calendar_events = 0
+    try:
+        fire_support_notes()
+    except Exception:
+        LOG.exception("Could not process support notes")
     if reminders or calendar_events:
         LOG.info(
             "Scheduled work: reminders %d; calendar %d",

@@ -19,6 +19,9 @@ An implementation must provide:
 |---|---|---|
 | `GET` | `/api/scopes` | List active personal/group scopes and calendar links |
 | `POST` | `/api/scopes/sync` | Reconcile the bot's current Signal groups |
+| `POST` | `/api/admission/personal` | Admit or waitlist an explicit prefixed DM sender |
+| `POST` | `/api/capacity/report` | Record an authenticated one-minute host health report |
+| `GET` | `/api/public/capacity` | Return aggregate capacity and plan status only |
 | `POST` | `/api/calendars/link` | Verify and link a calendar to a scope |
 | `GET` | `/api/reminders` | List reminders, optionally filtered by `groupRecipient` |
 | `POST` | `/api/reminders` | Atomically create a scoped reminder and unique short ID |
