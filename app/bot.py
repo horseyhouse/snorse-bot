@@ -41,6 +41,8 @@ from app.signal_messages import (
     utf16_slice,
 )
 from app.signal_scopes import (
+    member_identifiers,
+    normalize_signal_identifier,
     personal_scope,
     signal_group_scopes,
     visible_groups_for_sender,
@@ -246,9 +248,58 @@ def configured_scopes(*, force: bool = False) -> list[dict[str, Any]]:
     return SCOPE_CACHE
 
 
+def trust_group_member_identities(groups: list[Any]) -> None:
+    """Trust changed Signal identities only for members of the bot's groups."""
+    group_member_ids = set()
+    for group in groups:
+        if not isinstance(group, dict):
+            continue
+        for member in group.get("members") or []:
+            group_member_ids.update(member_identifiers(member))
+    if not group_member_ids:
+        return
+
+    account = urllib.parse.quote(PHONE_NUMBER, safe="+")
+    try:
+        identities = api_json(f"/v1/identities/{account}") or []
+    except Exception:
+        LOG.exception("Could not list Signal identities for group-member trust")
+        return
+
+    for identity in identities:
+        if (
+            not isinstance(identity, dict)
+            or str(identity.get("status")).casefold() != "untrusted"
+        ):
+            continue
+        identity_ids = {
+            normalize_signal_identifier(identity.get(field))
+            for field in ("uuid", "number")
+        }
+        identity_ids.discard(None)
+        if not group_member_ids.intersection(identity_ids):
+            continue
+        recipient = identity.get("uuid") or identity.get("number")
+        if not isinstance(recipient, str) or not recipient:
+            continue
+        try:
+            api_json(
+                f"/v1/identities/{account}/trust/"
+                f"{urllib.parse.quote(recipient, safe='+')}",
+                method="PUT",
+                payload={"trust_all_known_keys": True},
+            )
+            LOG.info("Trusted a changed Signal identity for a current group member")
+        except Exception:
+            LOG.exception(
+                "Could not trust a changed Signal identity for a current group member"
+            )
+
+
 def sync_signal_groups() -> list[dict[str, Any]]:
     """Reconcile the bot's current Signal groups into durable state scopes."""
     groups = api_json(f"/v1/groups/{urllib.parse.quote(PHONE_NUMBER, safe='+')}") or []
+    trust_group_member_identities(groups)
     scopes = signal_group_scopes(groups)
     result = reminder_api(
         "/api/scopes/sync",

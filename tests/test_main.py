@@ -800,6 +800,51 @@ class ReminderTests(unittest.TestCase):
             bot.HELP_TEXT,
         )
 
+    def test_only_untrusted_current_group_members_are_trusted(self):
+        groups = [
+            {
+                "members": [
+                    "member-uuid",
+                    {"aci": "ACI:second-member-uuid"},
+                ]
+            }
+        ]
+        identities = [
+            {"uuid": "member-uuid", "number": "", "status": "UNTRUSTED"},
+            {
+                "uuid": "second-member-uuid",
+                "number": "",
+                "status": "TRUSTED_UNVERIFIED",
+            },
+            {"uuid": "outsider-uuid", "number": "", "status": "UNTRUSTED"},
+        ]
+        with patch.object(bot, "api_json", side_effect=[identities, None]) as api:
+            bot.trust_group_member_identities(groups)
+
+        self.assertEqual(api.call_count, 2)
+        api.assert_any_call("/v1/identities/+15555550100")
+        api.assert_any_call(
+            "/v1/identities/+15555550100/trust/member-uuid",
+            method="PUT",
+            payload={"trust_all_known_keys": True},
+        )
+
+    def test_group_identity_lookup_failure_does_not_break_group_sync(self):
+        with (
+            patch.object(
+                bot,
+                "api_json",
+                side_effect=RuntimeError("Signal unavailable"),
+            ),
+            self.assertLogs(bot.LOG, level="ERROR") as captured,
+        ):
+            bot.trust_group_member_identities([{"members": ["member-uuid"]}])
+
+        self.assertIn(
+            "Could not list Signal identities for group-member trust",
+            "\n".join(captured.output),
+        )
+
     def test_new_signal_group_is_welcomed_with_help(self):
         new_group = {
             "groupRecipient": "group.new",
