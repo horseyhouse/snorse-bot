@@ -79,7 +79,7 @@ def command_after_horse_prefix(data_message: dict[str, Any]) -> str | None:
     text = data_message.get("message")
     if not isinstance(text, str):
         return None
-    match = re.fullmatch(r"\s*🐴\ufe0f?\s*(.*?)\s*", text, flags=re.DOTALL)
+    match = re.fullmatch(r"\s*(?:🐴|🐌)\ufe0f?\s*(.*?)\s*", text, flags=re.DOTALL)
     if not match:
         return None
     return match.group(1) or "help"

@@ -1052,6 +1052,16 @@ class ReminderTests(unittest.TestCase):
             bot.command_after_horse_prefix({"message": "hello 🐴 calendar"})
         )
 
+    def test_snail_prefix_extracts_command(self):
+        self.assertEqual(
+            bot.command_after_horse_prefix({"message": "  🐌 reminders  "}),
+            "reminders",
+        )
+        self.assertEqual(bot.command_after_horse_prefix({"message": "🐌"}), "help")
+        self.assertIsNone(
+            bot.command_after_horse_prefix({"message": "hello 🐌 calendar"})
+        )
+
     def test_different_uuid_placeholder_does_not_trigger_command(self):
         self.assertIsNone(
             bot.command_after_bot_mention(
