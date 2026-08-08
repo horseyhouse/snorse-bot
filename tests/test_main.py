@@ -727,7 +727,7 @@ class ReminderTests(unittest.TestCase):
         self.assertIn(
             "calendar-bot@example-project.iam.gserviceaccount.com", response
         )
-        self.assertIn("🐴 **calendar link** [calendar id]", response)
+        self.assertIn("🐴 or 🐌 **calendar link** [calendar id]", response)
         self.assertIn("only Google Calendar is supported rn", response)
         self.assertTrue(bot.command_returns_content("link calendar help"))
 
