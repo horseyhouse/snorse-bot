@@ -4,7 +4,7 @@ A self-hosted Signal bot for shared and private reminders, recurring schedules,
 and read-only Google Calendar digests.
 
 People interact with the bot inside Signal by mentioning it or starting a
-message with 🐴. Each Signal group has isolated reminders and calendars.
+message with 🐴 or 🐌. Each Signal group has isolated reminders and calendars.
 Private reminders belong to their sender, and DM listings expose group data
 only while that sender is a current member of the group.
 
@@ -15,12 +15,12 @@ The bot logic is hosting-provider neutral and runs anywhere Python and
 Hosting, backups, monitoring, and durable state are intentionally controlled by
 the operator.
 
-The bot currently uses a small authenticated HTTP
-[state-service contract](docs/state-api.md) for reminders, scopes, scheduling,
-and calendar access. The production implementation is AWS-specific and lives
-outside this application repository. A SQLite reference implementation is
-planned. Until it lands, new operators must provide a compatible state service
-or adapt that boundary.
+The bot uses a small authenticated HTTP [state-service contract](docs/state-api.md)
+for durable reminders, scopes, admission metadata, and notification claims.
+This repository includes a SQLite implementation, so a laptop or home-server
+operator does not need to write an API or create a cloud account. The separate
+infrastructure repository is only needed for the hosted AWS deployment or for
+operators who want a different durable backend.
 
 The project is free and open-source under the [MIT License](LICENSE).
 
@@ -42,7 +42,7 @@ guesses where private content should go.
 ## Commands
 
 ```text
-🐴 help
+🐴 help                  # 🐌 works too
 🐴 remind take out trash every monday at 7pm
 🐴 remind submit the form tomorrow at 7:30pm
 🐴 remind renew the permit on 2026-08-15 at 9am ET
@@ -63,31 +63,45 @@ Times default to `America/New_York`; ET, CT, MT, PT, and UTC are accepted.
 Custom IDs use lowercase letters, numbers, and hyphens. Each scope supports up
 to 50 active reminders.
 
-## Run with containers
+See the complete [command reference](docs/commands.md) for grammar, examples,
+calendar linking, edits, and DM behavior.
+
+## Self-host on a laptop
 
 Requirements:
 
-- Docker with Compose;
-- a Signal-capable phone number for the one-time registration;
-- a state service implementing [`docs/state-api.md`](docs/state-api.md).
+- a separate Signal-capable phone number (do not reuse your personal Signal
+  identity);
+- Docker Desktop with Compose.
 
 ```sh
 cp .env.example .env
-# Fill in the bot number, state API URL, and a long random state API token.
+# Edit .env: set BOT_PHONE_NUMBER and replace STATE_API_TOKEN with a random secret.
 docker compose up -d --build
 ```
+
+This starts three containers: the Python bot, `signal-cli-rest-api`, and the
+bundled SQLite state service. The state database is stored in the named
+`state-data` volume; no separate API implementation is required.
+
+Register the Signal number through the Signal API container using the upstream
+`signal-cli-rest-api` registration flow. After registration, verify the account:
+
+```sh
+curl --silent http://127.0.0.1:8080/v1/accounts
+docker compose logs -f bot
+```
+
+Then add the bot to a Signal group and mention it with `🐴 help`. Ordinary DMs
+are ignored unless they use the explicit DM command prefix.
 
 The Signal API is exposed only on `127.0.0.1:8080`. Its registered identity is
 stored in the named `signal-state` volume. Never delete that volume during an
 upgrade and never run two active copies of one Signal identity.
 
 Signal registration is interactive and depends on the selected
-`signal-cli-rest-api` version. Follow its upstream registration documentation,
-then confirm the account appears at:
-
-```sh
-curl --silent http://127.0.0.1:8080/v1/accounts
-```
+`signal-cli-rest-api` version. Follow its upstream registration documentation
+for the exact `register`, `verify`, and optional captcha steps.
 
 The core runtime environment variables are:
 
@@ -101,6 +115,13 @@ The core runtime environment variables are:
 | `BOT_SIGNAL_UUID` | Optional stable Signal identity address |
 | `BOT_MENTION_NAMES` | Optional comma-separated mention aliases |
 | `GOOGLE_SERVICE_ACCOUNT_EMAIL` | Optional address shown by calendar-link help |
+
+The bundled SQLite service intentionally has no Google credentials and returns
+a concise “calendar integration is not configured” response. Reminders,
+scopes, and Signal operation work without calendar access. To enable calendars,
+run a state service that implements the calendar endpoints in
+[`docs/state-api.md`](docs/state-api.md) and configure its Google read-only
+service account; this is how the hosted AWS adapter works.
 
 Legacy `SNORSE_*` names remain accepted so existing deployments can upgrade
 without downtime.
@@ -144,10 +165,27 @@ See [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), and
 real messages, phone numbers, group/calendar identifiers, credentials, or
 Signal identity files.
 
-## Hosting
+## Backups and upgrades
+
+Back up both named volumes before upgrades or moving hosts. For a quick local
+backup:
+
+```sh
+docker run --rm -v snorse-bot_state-data:/data -v "$PWD":/backup alpine \
+  tar czf /backup/snorse-state-$(date +%Y%m%d).tgz -C /data .
+docker run --rm -v snorse-bot_signal-state:/data -v "$PWD":/backup alpine \
+  tar czf /backup/snorse-signal-$(date +%Y%m%d).tgz -C /data .
+```
+
+Upgrade with `docker compose pull && docker compose up -d --build`. Never
+delete `signal-state`, and never run two active copies of the same Signal
+number. Treat the state token and Signal volume as secrets.
+
+## Hosting architecture
 
 This repository deliberately does not prescribe AWS, GCP, or any other
-provider. A host must provide:
+provider. The Compose setup is the complete reference deployment for a laptop
+or home server. A custom deployment must provide:
 
 - persistent Signal identity storage;
 - the state-service contract and its durable database;
@@ -157,11 +195,7 @@ provider. A host must provide:
   operator's risk tolerance.
 
 Provider-specific deployment examples can live in separate repositories without
-becoming dependencies of this application.
-## Turnkey self-hosting
-
-Copy `.env.example` to `.env`, configure a separate Signal-capable number and a long random `STATE_API_TOKEN`, register it with the included Signal API, then run `docker compose up -d`. The bundled SQLite state service needs no cloud credentials; `state-data` and `signal-state` are durable volumes and both must be backed up before upgrades. Never run two bot copies with the same Signal identity.
-
-Google Calendar is optional. Reminders and group scopes continue to work without credentials; calendar commands report that the integration is not configured.
-
-Private self-hosts default to effectively unlimited pools. Set `MAX_ACTIVE_GROUPS`, `MAX_PERSONAL_USERS`, and `ADMISSION_MODE=auto` to opt into the shared-host gate.
+becoming dependencies of this application. Private self-hosts default to
+effectively unlimited admission pools. Set `MAX_ACTIVE_GROUPS`,
+`MAX_PERSONAL_USERS`, and `ADMISSION_MODE=auto` to opt into the shared-host
+capacity gate.

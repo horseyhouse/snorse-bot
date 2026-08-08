@@ -5,7 +5,7 @@ from __future__ import annotations
 
 def help_text() -> str:
     return (
-        "🐴 commands:\n"
+        "🐴/🐌 commands:\n"
         "• **remind** [thing] [**tomorrow** | **on** [date] | **every** [day] | "
         "**every day**] **at** [time]\n"
         "• **reminders**\n"
@@ -25,9 +25,9 @@ def calendar_link_help(service_account_email: str) -> str:
         else "ask the bot operator for its Google service-account email\n"
     )
     return (
-        "🐴 **link a Google calendar**\n"
+        "🐴/🐌 **link a Google calendar**\n"
         f"{email}"
         "1. add me to your calendar using *see all event details*\n"
-        "2. send 🐴 **calendar link** [calendar id]\n"
+        "2. send 🐴 or 🐌 **calendar link** [calendar id]\n"
         "*only Google Calendar is supported rn*"
     )

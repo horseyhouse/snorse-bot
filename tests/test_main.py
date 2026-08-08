@@ -501,16 +501,16 @@ class ReminderTests(unittest.TestCase):
             patch.object(
                 bot,
                 "reminder_api",
-                return_value={
-                    "events": [
-                        {
-                            "id": "event-1",
-                            "summary": "dentist",
-                            "start": "2026-07-25T23:00:00-04:00",
-                            "groupRecipient": "group.co-op",
-                        }
-                    ]
-                },
+                side_effect=[
+                    {"events": [{
+                        "id": "event-1",
+                        "calendarId": "calendar@example.com",
+                        "summary": "dentist",
+                        "start": "2026-07-25T23:00:00-04:00",
+                        "groupRecipient": "group.co-op",
+                    }]},
+                    {"claimed": True},
+                ],
             ) as api,
             patch.object(bot, "send_to_group") as send,
         ):
@@ -518,11 +518,29 @@ class ReminderTests(unittest.TestCase):
                 now=datetime(2026, 7, 24, 23, tzinfo=timezone.utc)
             )
         self.assertEqual(fired, 1)
-        self.assertIn("leadMinutes=1440", api.call_args.args[0])
-        self.assertIn("lookbackMinutes=12", api.call_args.args[0])
+        self.assertIn("timeMin=", api.call_args_list[0].args[0])
+        self.assertIn("timeMax=", api.call_args_list[0].args[0])
+        self.assertEqual(api.call_args_list[1].args[0], "/api/calendar/claims")
+        self.assertEqual(api.call_args_list[1].kwargs["method"], "POST")
+        self.assertEqual(api.call_args_list[1].kwargs["payload"]["eventId"], "event-1")
         send.assert_called_once_with(
             "📅 tomorrow: dentist (11pm)", recipient="group.co-op"
         )
+
+    def test_calendar_event_is_not_sent_when_claim_was_already_taken(self):
+        event = {
+            "id": "event-1",
+            "calendarId": "calendar@example.com",
+            "summary": "dentist",
+            "start": "2026-07-25T23:00:00-04:00",
+            "groupRecipient": "group.co-op",
+        }
+        with (
+            patch.object(bot, "reminder_api", side_effect=[{"events": [event]}, {"claimed": False}]),
+            patch.object(bot, "send_to_group") as send,
+        ):
+            self.assertEqual(bot.fire_calendar_events(now=datetime(2026, 7, 24, 23, tzinfo=timezone.utc)), 0)
+        send.assert_not_called()
 
     def test_due_calendar_action_sends_styled_group_digest(self):
         reminder = {

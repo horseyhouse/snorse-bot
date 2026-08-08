@@ -1129,14 +1129,30 @@ def fire_due_reminders(*, now: datetime | None = None) -> int:
 
 def fire_calendar_events(*, now: datetime | None = None) -> int:
     now = now or datetime.now(timezone.utc)
+    target = now + timedelta(minutes=CALENDAR_LEAD_MINUTES)
+    window_start = target - timedelta(minutes=CALENDAR_LOOKBACK_MINUTES)
+    window_end = target + timedelta(minutes=1)
     query = urllib.parse.urlencode(
         {
-            "now": now.isoformat(),
-            "leadMinutes": CALENDAR_LEAD_MINUTES,
-            "lookbackMinutes": CALENDAR_LOOKBACK_MINUTES,
+            "timeMin": window_start.isoformat(),
+            "timeMax": window_end.isoformat(),
         }
     )
-    events = reminder_api(f"/api/calendar/due?{query}")["events"]
+    candidates = reminder_api(f"/api/calendar/events?{query}")["events"]
+    events = []
+    for event in candidates:
+        claimed = reminder_api(
+            "/api/calendar/claims",
+            method="POST",
+            payload={
+                "groupRecipient": event["groupRecipient"],
+                "calendarId": event["calendarId"],
+                "eventId": event["id"],
+                "leadMinutes": CALENDAR_LEAD_MINUTES,
+            },
+        )
+        if claimed.get("claimed"):
+            events.append(event)
     for event in events:
         start = parse_iso_instant(event["start"]).astimezone(ZoneInfo(DEFAULT_TIMEZONE))
         send_to_group(

@@ -28,12 +28,14 @@ An implementation must provide:
 | `PUT` | `/api/reminders/{id}` | Versioned update within an explicit scope |
 | `DELETE` | `/api/reminders/{id}` | Versioned deletion within an explicit scope |
 | `GET` | `/api/calendar/events` | List timed events for a scope and time window |
-| `GET` | `/api/calendar/due` | Atomically claim calendar notifications due now |
+| `POST` | `/api/calendar/claims` | Atomically claim one calendar notification |
 
-The application client for this contract lives in `app/bot.py`. Provider
-adapters belong in separate infrastructure projects. A small SQLite reference
-implementation is planned; until then, self-hosters must provide this service
-or adapt that client boundary.
+The application client for this contract lives in `app/bot.py`. This repository
+also includes the bundled SQLite implementation in `app/sqlite_state.py`, which
+is the default state service used by `compose.yaml`. Self-hosters using that
+Compose setup do not need to implement an API. Provider adapters belong in
+separate infrastructure projects only when an operator wants to replace the
+SQLite service with DynamoDB, Postgres, or another durable backend.
 
 Implementations must:
 
@@ -44,3 +46,8 @@ Implementations must:
 - never infer a default group;
 - return only timed Google Calendar events, not all-day events;
 - authenticate every request and avoid logging content-bearing payloads.
+
+Calendar eligibility (including the 24-hour window, lookback, timezone handling,
+and notification text) belongs to the bot. The state service fetches the
+requested timed events and atomically claims a stable event identity so a
+restart or concurrent worker cannot send it twice.

@@ -42,7 +42,7 @@ separate infrastructure repositories.
 
 ## Command behavior
 
-- Group commands require a real Signal mention or leading 🐴. DM commands
+- Group commands require a real Signal mention or leading 🐴/🐌. DM commands
   require an explicit prefix.
 - Preserve Signal UTF-16 mention offsets and structured mention metadata.
 - Commands and errors should be concise, lowercase, and forgiving of harmless
@@ -51,6 +51,10 @@ separate infrastructure repositories.
   when needed.
 - Keep presentation copy separate from parsing and storage behavior.
 - Reminder IDs are short, scope-local, reusable, and atomically unique.
+- When changing command parsing, help text, prefixes, or user-facing command
+  behavior, update `README.md` and `docs/commands.md` in the same change. Keep
+  examples executable against the current parser and add or update parser
+  tests for new grammar.
 
 ## Development
 
